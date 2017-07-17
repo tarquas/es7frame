@@ -10,6 +10,7 @@ class Db extends AutoInit {
 
   constructor(setup) {
     super(setup);
+    this.common = Db.common;
     if (!this.connString) throw new Error('MongoDB Connection string is not specified');
     if (!this.connOpts) this.connOpts = {};
     if (!this.prefix) this.prefix = '';
@@ -19,14 +20,12 @@ class Db extends AutoInit {
     await super.init();
 
     await new Promise((resolve, reject) => {
-      this.conn = mongoose.createConnection(
+      this.conn = this.common.createConnection(
         this.connString,
         this.connOpts,
         (err, res) => (err ? reject(err) : resolve(res))
       );
     });
-
-    this.common = Db.common;
   }
 
   async finish() {
