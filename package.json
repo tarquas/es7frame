@@ -1,0 +1,58 @@
+{
+  "name": "es7frame",
+  "version": "0.1.0",
+  "description": "ECMAScript 7 REST API Microservices Framework",
+  "main": "index.js",
+  "dependencies": {
+    "body-parser": "^1.17.2",
+    "compression": "^1.6.2",
+    "cors": "^2.8.3",
+    "express": "^4.15.3",
+    "mongoose": "^4.11.1",
+    "rabbit.js": "^0.4.4",
+    "uuid": "^3.1.0"
+  },
+  "devDependencies": {
+    "chai": "^4.1.0",
+    "eslint": "^4.2.0",
+    "eslint-config-airbnb-base": "^11.2.0",
+    "eslint-plugin-import": "^2.7.0",
+    "istanbul": "^0.4.5",
+    "jsinspect": "^0.12.6",
+    "mocha": "^3.4.2",
+    "mochawesome": "^2.3.0"
+  },
+  "keywords": [
+    "ecmascript",
+    "es7",
+    "async",
+    "await",
+    "framework",
+    "microservice",
+    "rest",
+    "api",
+    "mongo",
+    "mongodb",
+    "rabbit",
+    "rabbitmq",
+    "express",
+    "http",
+    "https",
+    "tls",
+    "cors"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tarquas/es7frame.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tarquas/es7frame/issues"
+  },
+  "homepage": "https://github.com/tarquas/es7frame#readme",
+  "scripts": {
+    "test": "mocha",
+    "lint": "node_modules/.bin/eslint *.js && node_modules/.bin/jsinspect *.js"
+  },
+  "author": "Taras Mykhailovych",
+  "license": "MIT"
+}
