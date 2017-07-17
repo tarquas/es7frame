@@ -16,12 +16,12 @@ class WebApi extends Web {
   async init() {
     await super.init();
 
-    this.app.use(cors({
+    this.use(cors({
       allowedHeaders: ['Content-Type', 'Authorization'],
       exposedHeaders: ['Content-Type', 'Date']
     }));
 
-    this.app.use(compression({level: 9}));
+    this.use(compression({level: 9}));
   }
 
   get errors() { return defaultErrors; }

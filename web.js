@@ -34,6 +34,11 @@ class Web extends AutoInit {
     }
   }
 
+  use(middleware) {
+    if (!this.prefix) return this.app.use(middleware);
+    return this.app.use(this.prefix, middleware);
+  }
+
   async init() {
     await super.init();
 
@@ -53,7 +58,10 @@ class Web extends AutoInit {
   }
 
   async finish() {
-    this.server.close();
+    if (this.primary) {
+      if (this.http) this.http.close();
+      if (this.https) this.https.close();
+    }
     await super.finish();
   }
 }

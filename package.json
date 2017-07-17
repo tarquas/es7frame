@@ -1,6 +1,6 @@
 {
   "name": "es7frame",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ECMAScript 7 REST API Microservices Framework",
   "main": "index.js",
   "dependencies": {
