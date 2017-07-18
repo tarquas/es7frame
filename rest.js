@@ -20,31 +20,32 @@ class Rest extends AutoInit {
     return result;
   }
 
-  async callHandler(handler, req) {
+  async callHandler(handler, req, context) {
     let result;
+    const ctx = context || this;
 
     if (Object.getPrototypeOf(handler).constructor.name === 'AsyncFunction') {
-      result = await handler.call(this, req);
+      result = await handler.call(ctx, req);
     } else {
-      result = await this.express(handler, req);
+      result = await this.express.call(ctx, handler, req);
     }
 
     return result;
   }
 
   async processMiddlewares(names, req) {
-    if (!names) return;
-
     for (const name of names) {
       const fields = name.match(Rest.rxFollow);
       let p = this.web;
+      let context = null;
 
       for (const field of fields) {
         p = p[field];
+        if (!context) context = p;
         if (!p) throw new Error(`Property ${field} not found in ${name} middleware`);
       }
 
-      await this.callHandler(p, req); // eslint-disable-line
+      await this.callHandler(p, req, context); // eslint-disable-line
     }
   }
 
@@ -53,6 +54,7 @@ class Rest extends AutoInit {
       try {
         if (middleware) {
           const names = middleware.match(Rest.rxMiddleware);
+          if (!names) return;
           await this.processMiddlewares(names, req);
         }
 
@@ -76,7 +78,7 @@ class Rest extends AutoInit {
 
     this.web.app[method.toLowerCase()](
       `${this.web.prefix}${path}`,
-      this.wrapToMiddleware.call(this, handler, middleware)
+      this.wrapToMiddleware(handler, middleware)
     );
   }
 
