@@ -89,7 +89,7 @@ class Rest extends AutoInit {
   }
 }
 
-Rest.rxMethodPath = /^(\w+)\s+(\S+)([\s>]+[^\s>]+)*$/;
+Rest.rxMethodPath = /^(\w+)\s+(\S+)(([\s>]+[^\s>]+)*)$/;
 Rest.rxMiddleware = /[^\s>]+/g;
 Rest.rxFollow = /[^.]+/g;
 
