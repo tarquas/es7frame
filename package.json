@@ -1,6 +1,6 @@
 {
   "name": "es7frame",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "ECMAScript 7 REST API Microservices Framework",
   "main": "index.js",
   "dependencies": {
@@ -50,7 +50,7 @@
   },
   "homepage": "https://github.com/tarquas/es7frame#readme",
   "scripts": {
-    "test": "mocha",
+    "test": "node_modules/.bin/mocha",
     "lint": "node_modules/.bin/eslint *.js && node_modules/.bin/jsinspect *.js"
   },
   "author": "Taras Mykhailovych",

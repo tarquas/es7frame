@@ -24,7 +24,16 @@ class WebApi extends Web {
     this.use(compression({level: 9}));
   }
 
-  get errors() { return defaultErrors; }
+  static get errors() {
+    if (Object.hasOwnProperty.call(this, '_errors')) return this._errors;
+    this._errors = Object.create(super.errors || defaultErrors);
+    return this._errors;
+  }
+
+  get errors() {
+    const errors = this.constructor.errors;
+    return errors;
+  }
 
   async response(data, req) {
     req.res.end(JSON.stringify(data, null, 2));
