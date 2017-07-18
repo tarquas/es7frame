@@ -19,7 +19,6 @@ class Web extends AutoInit {
   }
 
   createServers() {
-    if (this.primary != null) return;
     const exists = Web.binds[this.bind];
 
     if (exists) {
@@ -28,7 +27,16 @@ class Web extends AutoInit {
     } else {
       this.app = express();
       if (this.httpBind) this.http = http.Server(this.app, this.httpOpts);
-      if (this.httpsBind) this.https = https.Server(this.app, this.httpsOpts);
+
+      if (this.httpsBind) {
+        if (this.httpBind === this.httpsBind) {
+          this.https = this.http;
+          this.https.setSecure(this.httpsOpts);
+        } else {
+          this.https = https.Server(this.app, this.httpsOpts);
+        }
+      }
+
       Web.binds[this.bind] = {app: this.app, http: this.http, https: this.https};
       this.primary = true;
     }
@@ -44,7 +52,10 @@ class Web extends AutoInit {
 
     if (this.primary) {
       if (this.http) await util.promisify(this.http.listen).call(this.http, this.httpBind);
-      if (this.https) await util.promisify(this.https.listen).call(this.https, this.httpsBind);
+
+      if (this.https && this.https !== this.http) {
+        await util.promisify(this.https.listen).call(this.https, this.httpsBind);
+      }
     }
   }
 
@@ -60,7 +71,7 @@ class Web extends AutoInit {
   async finish() {
     if (this.primary) {
       if (this.http) this.http.close();
-      if (this.https) this.https.close();
+      if (this.https && this.https !== this.http) this.https.close();
     }
     await super.finish();
   }

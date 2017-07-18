@@ -1,10 +1,11 @@
-class Cache {
+const AutoInit = require('./auto-init');
+
+class Cache extends AutoInit {
   // maxLifetime : time in milliseconds after which to expire least recently used items
   // maxCount : time in milliseconds to expire least recently used items
 
-  constructor({maxLifetime, maxCount}) {
-    this.maxLifetime = maxLifetime;
-    this.maxCount = maxCount;
+  constructor(setup) {
+    super(setup);
     this.cache = {};
     this.nCache = 0;
   }
@@ -15,6 +16,7 @@ class Cache {
         const obj = this.cache[key];
 
         if (this.nCache > maxCount || expireAfter > obj.usedAt) {
+          this.emit('expire', key, obj.object);
           this.remove(key);
         } else break;
       }
@@ -35,10 +37,12 @@ class Cache {
     if (object) obj.object = object;
     this.cache[key] = obj;
     this.nCache++;
+    this.emit('add', key, object);
     this.checkExpire();
   }
 
   remove(key) {
+    this.emit('remove', key);
     delete this.cache[key];
     this.nCache--;
   }
