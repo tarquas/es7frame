@@ -1,5 +1,8 @@
-class Async {
+const EventEmitter = require('events');
+
+class Async extends EventEmitter {
   constructor() {
+    super();
     this.ready = this.init();
     this.ready.catch(() => true);
     this.finishTimeout = Async.finishTimeoutMsec;
@@ -15,6 +18,8 @@ class Async {
 
   async finish() {
     delete Async.instances[this.instanceId];
+    this.finish = Async.nullAsyncFunc;
+    this.finished = true;
   }
 
   async main() {
@@ -87,7 +92,12 @@ class Async {
 
   static throw(err) {
     const error = err || 'unknown';
-    console.log(error.stack || error);
+
+    if (!Async.errorSilent) {
+      const now = new Date().toISOString();
+      console.log(`>>> ${now} @ CRITICAL\n\n${error.stack || error}`);
+    }
+
     const code = isFinite(error.code) ? error.code : 1;
     return code;
   }
@@ -139,6 +149,9 @@ class Async {
   static tick() {
     const tick = new Promise(resolve => setImmediate(resolve));
     return tick;
+  }
+
+  static async nullAsyncFunc() {
   }
 }
 

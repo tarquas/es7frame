@@ -33,7 +33,10 @@ class WebApi extends Web {
   async internalError(err, req) {
     const now = new Date().toISOString();
     req.res.status(500);
-    if (!this.errorSilent) console.log(`>>> ${now} @ ${req.method} ${req.path}\n\n${err.stack}`);
+
+    if (!this.errorSilent) {
+      console.log(`>>> ${now} @ ${req.method} ${req.path}\n\n${err.stack || err}`);
+    }
 
     this.response({
       error: 'internal',

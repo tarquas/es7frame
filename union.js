@@ -1,57 +1,79 @@
-const unionMaker = ({
-  Class, // a Class to convert to union by extending it with members and dependencies.
-  type, // a field name, which members get the union circular reference to.
-  members = {}, // dictionary of AutoInit-derived classes to be instantiated with specifying union
-  // and deps in corresponding fields.
-  deps = {}, // dictionary of instances to be initialized at AutoInit's space.
-  defaultInit = {} // params which initialize defaultInstance.
-}) => class Union extends Class {
-  static get defaultInstance() {
-    if (!this.currentInst) {
-      const obj = new this(defaultInit);
-      Object.assign(obj, deps);
-      this.currentInst = obj;
-    }
+const unionMaker = (Class) => {
+  // After module exporting, please extend Union.desc object with following:
+  //   type: a field name, which members get the union circular reference to.
+  //   members: dictionary of AutoInit-derived classes to be instantiated with specifying union
+  //     and deps in corresponding fields.
+  //   deps: dictionary of AutoInits to be initialized at current AutoInit's space.
+  //   defaultInit: params which initialize defaultInstance.
 
-    return this.currentInst;
-  }
+  class Union extends Class {
+    static get defaultInstance() {
+      if (!this.currentInst) {
+        const obj = new this(Union.desc.defaultInit);
+        this.currentInst = obj;
+        const depInsts = {};
 
-  async init() {
-    await super.init();
+        for (const dep in Union.desc.deps) {
+          if (Object.hasOwnProperty.call(Union.desc.deps, dep)) {
+            depInsts[dep] = Union.desc.deps[dep].defaultInstance;
+          }
+        }
 
-    this.memberKeys = [];
-    this.depKeys = Object.keys(deps);
-    const readiness = this.depKeys.map(dep => (this[dep] && this[dep].ready));
-
-    for (const member in members) {
-      if (Object.hasOwnProperty.call(members, member)) {
-        const init = {[type]: this};
-        Object.assign(init, ...this.depKeys.map(key => ({[key]: this[key]})));
-        const inst = new members[member](init);
-        this[member] = inst;
-        readiness.push(inst.ready);
-        this.memberKeys.push(member);
+        Object.assign(obj, depInsts);
       }
+
+      return this.currentInst;
     }
 
-    await Promise.all(readiness);
-  }
+    async init() {
+      await super.init();
 
-  async finish() {
-    const readiness = [];
+      this.memberKeys = [];
+      this.depKeys = Object.keys(Union.desc.deps);
 
-    for (const member in members) {
-      if (Object.hasOwnProperty.call(members, member)) {
-        const ready = this[member].finish();
-        readiness.push(ready);
-        delete this[member][type];
-        delete this[member];
+      const readiness = [];
+
+      for (const dep of this.depKeys) {
+        const inst = this[dep];
+        if (inst && !inst[Union.desc.type]) readiness.push(inst.ready);
       }
+
+      for (const member in Union.desc.members) {
+        if (Object.hasOwnProperty.call(Union.desc.members, member)) {
+          const init = {[Union.desc.type]: this};
+          Object.assign(init, ...this.depKeys.map(key => ({[key]: this[key]})));
+          const inst = new Union.desc.members[member](init);
+          this[member] = inst;
+          readiness.push(inst.ready);
+          this.memberKeys.push(member);
+        }
+      }
+
+      await Promise.all(readiness);
     }
 
-    await Promise.all(readiness);
-    await super.finish();
+    async finish() {
+      const readiness = [];
+
+      for (const member in Union.desc.members) {
+        if (Object.hasOwnProperty.call(Union.desc.members, member)) {
+          const inst = this[member];
+          const finishFunc = inst.finish;
+          inst.finish = Union.nullAsyncFunc;
+          const ready = finishFunc.call(inst);
+          readiness.push(ready);
+          delete this[member][Union.desc.type];
+          delete this[member];
+        }
+      }
+
+      await Promise.all(readiness);
+      await super.finish();
+    }
   }
+
+  Union.desc = {};
+  return Union;
 };
 
 module.exports = unionMaker;

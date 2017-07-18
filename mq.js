@@ -22,8 +22,12 @@ class Mq extends AutoInit {
     this.conn = await this.context._connection;
   }
 
-  async error(err, {id, msg, type}) { // eslint-disable-line
-    // virtual
+  async error(err, {id, type}) {
+    const now = new Date().toISOString();
+
+    if (!this.errorSilent) {
+      console.log(`>>> ${now} @ ${type.toUpperCase()} ${id}\n\n${err.stack || err}`);
+    }
   }
 
   static objToBuffer(obj) {
@@ -190,9 +194,13 @@ class Mq extends AutoInit {
     await new Promise(resolve => sub.connect(queue, resolve));
     sub.setEncoding('utf8');
 
-    sub.on('data', (data) => {
-      const obj = JSON.parse(data);
-      onData(obj).catch(() => true);
+    sub.on('data', async (data) => {
+      try {
+        const obj = JSON.parse(data);
+        await onData(obj);
+      } catch (err) {
+        await this.error(err, {id, msg: data, type: 'sub'});
+      }
     });
 
     const handlerId = Mq.nextHandlerId++;
