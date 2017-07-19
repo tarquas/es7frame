@@ -26,7 +26,7 @@ class WebApi extends Web {
 
   static get errors() {
     if (Object.hasOwnProperty.call(this, '_errors')) return this._errors;
-    this._errors = Object.create(super.errors || defaultErrors);
+    this._errors = Object.create(Object.getPrototypeOf(this).errors || defaultErrors);
     return this._errors;
   }
 
