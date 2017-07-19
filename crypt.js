@@ -7,14 +7,14 @@ class Crypt {
   }
 
   static toUrlSafe(base64) {
-    const ents = base64.match(this.constructor.toUrlSafeRx);
-    const result = ents.map(ent => this.constructor.toUrlSafeMap[ent] || ent).join('');
+    const ents = base64.match(this.toUrlSafeRx);
+    const result = ents.map(ent => this.toUrlSafeMap[ent] || ent).join('');
     return result;
   }
 
   static fromUrlSafe(base64) {
-    const ents = base64.match(this.constructor.fromUrlSafeRx);
-    const result = ents.map(ent => this.constructor.fromUrlSafeMap[ent] || ent).join('');
+    const ents = base64.match(this.fromUrlSafeRx);
+    const result = ents.map(ent => this.fromUrlSafeMap[ent] || ent).join('');
     return result;
   }
 
@@ -45,7 +45,7 @@ class Crypt {
   static parseUserId(userId) {
     if (!userId) return null;
     if (userId.length === 24) return new Buffer(userId, 'hex').toString('base64');
-    if (userId.length === 16) return this.constructor.fromUrlSafe(userId);
+    if (userId.length === 16) return this.fromUrlSafe(userId);
     return null;
   }
 
