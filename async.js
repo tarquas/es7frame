@@ -5,7 +5,7 @@ class Async extends EventEmitter {
     super();
     this.ready = this.init();
     this.ready.catch(() => true);
-    this.finishTimeout = Async.finishTimeoutMsec;
+    this.finishTimeout = this.constructor.finishTimeoutMsec;
     this.instanceId = Async.nextInstanceId++;
     this[Async.isAsync] = true;
     Async.instances[this.instanceId] = this;
@@ -54,18 +54,18 @@ class Async extends EventEmitter {
     let code;
 
     const abort = new Promise((resolve, reject) => {
-      Async.abort = resolve;
-      Async.abortError = reject;
+      this.constructor.abort = resolve;
+      this.constructor.abortError = reject;
     });
 
-    process.on('SIGTERM', () => Async.abort('SIGTERM'));
-    process.on('SIGHUP', () => Async.abort('SIGHUP'));
-    process.on('SIGINT', () => Async.abort('SIGINT'));
+    process.on('SIGTERM', () => this.constructor.abort('SIGTERM'));
+    process.on('SIGHUP', () => this.constructor.abort('SIGHUP'));
+    process.on('SIGINT', () => this.constructor.abort('SIGINT'));
 
     const mainProc = this.main(...process.argv);
 
     if (this.stay) {
-      mainProc.catch(Async.abortError);
+      mainProc.catch(this.constructor.abortError);
       code = await abort;
     } else {
       code = await Promise.race([abort, mainProc]);
@@ -93,7 +93,7 @@ class Async extends EventEmitter {
   static throw(err) {
     const error = err || 'unknown';
 
-    if (!Async.errorSilent) {
+    if (!this.errorSilent) {
       const now = new Date().toISOString();
       console.log(`>>> ${now} @ CRITICAL\n\n${error.stack || error}`);
     }
@@ -157,11 +157,13 @@ class Async extends EventEmitter {
 
 module.exports = Async;
 
-Async.nextInstanceId = 0;
 Async.isAsync = Symbol('isAsync');
 Async[Async.isAsync] = true;
+
 Async.instances = {};
+Async.nextInstanceId = 0;
 Async.holdOnTimeoutMsec = 60000;
+
 Async.finishTimeoutMsec = 2000;
 
 let hold = false;
@@ -189,10 +191,10 @@ function getLauncher() {
 }
 
 async function master() {
-  try {
-    const Launcher = getLauncher();
-    if (!Launcher) return;
+  const Launcher = getLauncher();
+  if (!Launcher) return;
 
+  try {
     holdOn(true);
 
     try {
@@ -200,12 +202,12 @@ async function master() {
       code = await session.runMain();
       if (code === false) return;
     } finally {
-      await Async.finishAllInstances();
+      await Launcher.finishAllInstances();
       clearTimeout(hold);
       hold = false;
     }
   } catch (err) {
-    code = Async.throw(err);
+    code = Launcher.throw(err);
   }
 
   process.exit(code);

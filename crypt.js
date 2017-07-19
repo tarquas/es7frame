@@ -3,18 +3,18 @@ const crypto = require('crypto');
 class Crypt {
   constructor(password) {
     this.password = password;
-    this.algorithm = Crypt.defaultAlgorithm;
+    this.algorithm = this.constructor.defaultAlgorithm;
   }
 
   static toUrlSafe(base64) {
-    const ents = base64.match(Crypt.toUrlSafeRx);
-    const result = ents.map(ent => Crypt.toUrlSafeMap[ent] || ent).join('');
+    const ents = base64.match(this.constructor.toUrlSafeRx);
+    const result = ents.map(ent => this.constructor.toUrlSafeMap[ent] || ent).join('');
     return result;
   }
 
   static fromUrlSafe(base64) {
-    const ents = base64.match(Crypt.fromUrlSafeRx);
-    const result = ents.map(ent => Crypt.fromUrlSafeMap[ent] || ent).join('');
+    const ents = base64.match(this.constructor.fromUrlSafeRx);
+    const result = ents.map(ent => this.constructor.fromUrlSafeMap[ent] || ent).join('');
     return result;
   }
 
@@ -27,12 +27,12 @@ class Crypt {
     let crypted = cipher.update(noise64 + text, 'base64', 'base64');
     crypted += cipher.final('base64');
 
-    const result = Crypt.toUrlSafe(crypted);
+    const result = this.constructor.toUrlSafe(crypted);
     return result;
   }
 
   decrypt(text) {
-    const base64 = Crypt.fromUrlSafe(text);
+    const base64 = this.constructor.fromUrlSafe(text);
 
     const decipher = crypto.createDecipher(this.algorithm, this.password);
     let dec = decipher.update(base64, 'base64', 'base64');
@@ -45,7 +45,7 @@ class Crypt {
   static parseUserId(userId) {
     if (!userId) return null;
     if (userId.length === 24) return new Buffer(userId, 'hex').toString('base64');
-    if (userId.length === 16) return Crypt.fromUrlSafe(userId);
+    if (userId.length === 16) return this.constructor.fromUrlSafe(userId);
     return null;
   }
 
@@ -57,7 +57,7 @@ class Crypt {
 
   getToken(tokenData) {
     const userId = tokenData.userId;
-    const userIdA = Crypt.parseUserId(userId);
+    const userIdA = this.constructor.parseUserId(userId);
 
     if (!userIdA || userIdA.length !== 16) throw new Error('Token User ID is invalid');
 
@@ -87,7 +87,7 @@ class Crypt {
     const userId = text.substr(0, 16);
     if (format === 'base64') result.userId = userId;
     else if (format) result.userId = new Buffer(userId, 'base64').toString(format);
-    else result.userId = Crypt.toUrlSafe(userId);
+    else result.userId = this.constructor.toUrlSafe(userId);
 
     return result;
   }

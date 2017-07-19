@@ -10,7 +10,7 @@ class Db extends AutoInit {
 
   constructor(setup) {
     super(setup);
-    this.common = Db.common;
+    this.common = this.constructor.common;
     if (!this.connString) throw new Error('MongoDB Connection string is not specified');
     if (!this.connOpts) this.connOpts = {};
     if (!this.prefix) this.prefix = '';

@@ -15,7 +15,7 @@ class Multi extends AutoInit {
   async main(...args) {
     for (const key of this.memberKeys) {
       const inst = this[key];
-      await Multi.runInstance(inst, args); // eslint-disable-line
+      await this.constructor.runInstance(inst, args); // eslint-disable-line
     }
   }
 }

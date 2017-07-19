@@ -9,13 +9,14 @@ const unionMaker = (Class) => {
   class Union extends Class {
     static get defaultInstance() {
       if (!this.currentInst) {
-        const obj = new this(Union.desc.defaultInit);
+        const desc = this.desc;
+        const obj = new this(desc.defaultInit);
         this.currentInst = obj;
         const depInsts = {};
 
-        for (const dep in Union.desc.deps) {
-          if (Object.hasOwnProperty.call(Union.desc.deps, dep)) {
-            depInsts[dep] = Union.desc.deps[dep].defaultInstance;
+        for (const dep in desc.deps) {
+          if (Object.hasOwnProperty.call(desc.deps, dep)) {
+            depInsts[dep] = desc.deps[dep].defaultInstance;
           }
         }
 
@@ -27,22 +28,23 @@ const unionMaker = (Class) => {
 
     async init() {
       await super.init();
+      const desc = this.constructor.desc;
 
       this.memberKeys = [];
-      this.depKeys = Object.keys(Union.desc.deps);
+      this.depKeys = Object.keys(desc.deps);
 
       const readiness = [];
 
       for (const dep of this.depKeys) {
         const inst = this[dep];
-        if (inst && !inst[Union.desc.type]) readiness.push(inst.ready);
+        if (inst && !inst[desc.type]) readiness.push(inst.ready);
       }
 
-      for (const member in Union.desc.members) {
-        if (Object.hasOwnProperty.call(Union.desc.members, member)) {
-          const init = {[Union.desc.type]: this};
+      for (const member in desc.members) {
+        if (Object.hasOwnProperty.call(desc.members, member)) {
+          const init = {[desc.type]: this};
           Object.assign(init, ...this.depKeys.map(key => ({[key]: this[key]})));
-          const inst = new Union.desc.members[member](init);
+          const inst = new desc.members[member](init);
           this[member] = inst;
           readiness.push(inst.ready);
           this.memberKeys.push(member);
@@ -53,16 +55,17 @@ const unionMaker = (Class) => {
     }
 
     async finish() {
+      const desc = this.constructor.desc;
       const readiness = [];
 
-      for (const member in Union.desc.members) {
-        if (Object.hasOwnProperty.call(Union.desc.members, member)) {
+      for (const member in desc.members) {
+        if (Object.hasOwnProperty.call(desc.members, member)) {
           const inst = this[member];
           const finishFunc = inst.finish;
           inst.finish = Union.nullAsyncFunc;
           const ready = finishFunc.call(inst);
           readiness.push(ready);
-          delete this[member][Union.desc.type];
+          delete this[member][desc.type];
           delete this[member];
         }
       }

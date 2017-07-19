@@ -4,7 +4,7 @@ class Disp extends AutoInit {
   // mq -- message queue (class Mq) instance
 
   async addHandler(action, customHandler) {
-    const [ents, socket, queue] = action.match(Disp.rxSocketQueue) || [];
+    const [ents, socket, queue] = action.match(this.constructor.rxSocketQueue) || [];
     if (!ents) return;
     const handler = customHandler || this[action];
     const handlerId = await this.mq[socket.toLowerCase()](queue, handler.bind(this));

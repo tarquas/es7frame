@@ -35,7 +35,7 @@ class Rest extends AutoInit {
 
   async processMiddlewares(names, req) {
     for (const name of names) {
-      const fields = name.match(Rest.rxFollow);
+      const fields = name.match(this.constructor.rxFollow);
       let p = this.web;
       let context = null;
 
@@ -53,7 +53,7 @@ class Rest extends AutoInit {
     return async (req, res, next) => {
       try {
         if (middleware) {
-          const names = middleware.match(Rest.rxMiddleware);
+          const names = middleware.match(this.constructor.rxMiddleware);
           if (!names) return;
           await this.processMiddlewares(names, req);
         }
@@ -72,7 +72,7 @@ class Rest extends AutoInit {
   }
 
   addRoute(action, customHandler) {
-    const [ents, method, path, middleware] = action.match(Rest.rxMethodPath) || [];
+    const [ents, method, path, middleware] = action.match(this.constructor.rxMethodPath) || [];
     if (!ents) return;
     const handler = customHandler || this[action];
 

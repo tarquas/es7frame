@@ -68,7 +68,7 @@ class WebApi extends Web {
     const error = this.errors[err];
     if (!error) return this.customError(err, req);
 
-    const [ents, code, message] = error.match(WebApi.rxErrorDesc) || [];
+    const [ents, code, message] = error.match(this.constructor.rxErrorDesc) || [];
     if (!ents) return this.customError(err, req);
 
     const status = code - 0;

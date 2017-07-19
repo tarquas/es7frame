@@ -7,7 +7,7 @@ class Model extends AutoInit {
   constructor(setup) {
     super(setup);
     this.Schema = this.db.common.Schema;
-    this.errors = Model.errors;
+    this.errors = this.constructor.errors;
   }
 
   async init() {

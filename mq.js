@@ -65,7 +65,7 @@ class Mq extends AutoInit {
       if (process) {
         await process.call(this, id, onData, {ch, type, queueOpts, msg});
       } else {
-        const decoded = Mq.bufferToObj(msg.content);
+        const decoded = this.constructor.bufferToObj(msg.content);
 
         try {
           await onData(decoded);
@@ -88,7 +88,7 @@ class Mq extends AutoInit {
 
     try {
       await ch.assertQueue(queue, {durable: true});
-      const data = Mq.objToBuffer(payload);
+      const data = this.constructor.objToBuffer(payload);
       const sent = await ch.sendToQueue(queue, data, {persistent: true});
       return sent;
     } finally {
@@ -112,7 +112,7 @@ class Mq extends AutoInit {
       const promise = new Promise(async (resolve, reject) => {
         await ch.consume(qok.queue, (msg) => {
           if (msg.properties.correlationId === corrId) {
-            const decoded = Mq.bufferToObj(msg.content);
+            const decoded = this.constructor.bufferToObj(msg.content);
 
             if (decoded.error) {
               if (decoded.error.isError) {
@@ -125,7 +125,7 @@ class Mq extends AutoInit {
         });
       });
 
-      const data = Mq.objToBuffer(payload);
+      const data = this.constructor.objToBuffer(payload);
       await ch.sendToQueue(queue, data, {correlationId: corrId, replyTo: qok.queue});
 
       const result = await promise;
@@ -149,16 +149,16 @@ class Mq extends AutoInit {
   }
 
   async rpcWorkerProcess(id, onData, {ch, type, msg}) {
-    const decoded = Mq.bufferToObj(msg.content);
+    const decoded = this.constructor.bufferToObj(msg.content);
     let response;
 
     try {
       response = {data: await onData(decoded)};
     } catch (err) {
-      response = Mq.rpcMakeError(err);
+      response = this.constructor.rpcMakeError(err);
     }
 
-    const data = Mq.objToBuffer(response);
+    const data = this.constructor.objToBuffer(response);
 
     try {
       await ch.sendToQueue(
