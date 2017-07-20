@@ -187,6 +187,7 @@ function getLauncherFromMain() {
 
 function getLauncher() {
   if (Async.Launcher) return Async.Launcher;
+  if (global.Launcher) return global.Launcher;
   return getLauncherFromMain();
 }
 
