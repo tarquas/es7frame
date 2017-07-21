@@ -94,13 +94,17 @@ const adapterMaker = (mq, options) => {
       this.super.broadcast.apply(this, args);
     }
 
+    add(id, room, fn) {
+      return this.addAll(id, [room], fn);
+    }
+
     async addAll(id, rooms, fn) {
       try {
         const ch = await this.connected;
 
         await Promise.all(rooms.map(async (room) => {
           const needToSubscribe = !this.rooms[room];
-          this.super.addAll.call(this, id, [room]);
+          this.super.add.call(this, id, room);
           const channel = getChannelName(prefix, this.nsp.name, room);
           if (!needToSubscribe) return;
           await ch.bindQueue(this.amqpIncomingQueue, this.amqpExchangeName, channel, {});
