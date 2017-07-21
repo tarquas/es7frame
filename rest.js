@@ -25,7 +25,7 @@ class Rest extends AutoInit {
     const ctx = context || this;
 
     if (Object.getPrototypeOf(handler).constructor.name === 'AsyncFunction') {
-      result = await handler.call(ctx, req);
+      result = await handler.call(ctx, req, req);
     } else {
       result = await this.express.call(ctx, handler, req);
     }
@@ -33,14 +33,14 @@ class Rest extends AutoInit {
     return result;
   }
 
-  async processMiddlewares(names, req) {
+  async processMiddlewares(names, req) { // eslint-disable-line
     for (const name of names) {
-      const fields = name.match(this.constructor.rxFollow);
+      const fields = name.split('.');
       let p = this.web;
       let context = null;
 
       for (const field of fields) {
-        p = p[field];
+        p = p ? p[field] : this;
         if (!context) context = p;
         if (!p) throw new Error(`Property ${field} not found in ${name} middleware`);
       }
@@ -72,8 +72,8 @@ class Rest extends AutoInit {
   }
 
   addRoute(action, customHandler) {
-    const [ents, method, path, middleware] = action.match(this.constructor.rxMethodPath) || [];
-    if (!ents) return;
+    const [matched, method, path, middleware] = action.match(this.constructor.rxMethodPath) || [];
+    if (!matched) return;
     const handler = customHandler || this[action];
 
     this.web.app[method.toLowerCase()](
@@ -91,7 +91,7 @@ class Rest extends AutoInit {
   }
 }
 
-Rest.rxMethodPath = /^(\w+)\s+(\S+)(([\s>]+[^\s>]+)*)$/;
+Rest.rxMethodPath = /^(\w+)\s+(\S+)((\s*>\s*[^\s>]+)*)$/;
 Rest.rxMiddleware = /[^\s>]+/g;
 Rest.rxFollow = /[^.]+/g;
 

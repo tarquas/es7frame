@@ -44,7 +44,7 @@ class WebApi extends Web {
     req.res.status(500);
 
     if (!this.errorSilent) {
-      console.log(`>>> ${now} @ ${req.method} ${req.path}\n\n${err.stack || err}`);
+      console.log(`>>> ${now} @ WEB ${req.method} ${req.path}\n\n${err.stack || err}`);
     }
 
     this.response({

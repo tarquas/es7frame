@@ -19,7 +19,8 @@ class Web extends AutoInit {
   }
 
   createServers() {
-    const exists = Web.binds[this.bind];
+    const bind = `WEB ${this.bind}`;
+    const exists = Web.binds[bind];
 
     if (exists) {
       Object.assign(this, exists);
@@ -37,7 +38,7 @@ class Web extends AutoInit {
         }
       }
 
-      Web.binds[this.bind] = {app: this.app, http: this.http, https: this.https};
+      Web.binds[bind] = {app: this.app, http: this.http, https: this.https};
       this.primary = true;
     }
   }
@@ -73,6 +74,10 @@ class Web extends AutoInit {
       if (this.http) this.http.close();
       if (this.https && this.https !== this.http) this.https.close();
     }
+
+    delete this.app;
+    delete this.http;
+    delete this.https;
     await super.finish();
   }
 }

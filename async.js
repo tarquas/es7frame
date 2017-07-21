@@ -146,6 +146,11 @@ class Async extends EventEmitter {
     return timeout;
   }
 
+  static async timeout(msec, err) {
+    await this.delay(msec);
+    throw err || 'timeout';
+  }
+
   static tick() {
     const tick = new Promise(resolve => setImmediate(resolve));
     return tick;

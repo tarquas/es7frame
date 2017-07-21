@@ -26,7 +26,7 @@ class Mq extends AutoInit {
     const now = new Date().toISOString();
 
     if (!this.errorSilent) {
-      console.log(`>>> ${now} @ ${type.toUpperCase()} ${id}\n\n${err.stack || err}`);
+      console.log(`>>> ${now} @ MQ ${type.toUpperCase()} ${id}\n\n${err.stack || err}`);
     }
   }
 
