@@ -64,7 +64,8 @@ class Socket extends AutoInit {
     const action = `${method} ${event} ${nsp || '/'}`;
     if (this.subscriptions[action]) throw new Error('Multiple subscriptions to same event not allowed');
 
-    const bound = function actionHandler(...args) {
+    const bound = async function actionHandler(...args) {
+      await this.connectReady;
       this[method].call(this, handler, {event, action}, ...args);
     };
 
@@ -141,10 +142,20 @@ class Socket extends AutoInit {
   async connect() {
   }
 
+  async connected(socket) {
+    let context = this.socketContexts[socket.id];
+    if (!context) context = await this.onConnection(socket);
+    await context.connectReady;
+  }
+
   get room() { return null; }
 
   async onConnection(socket) {
-    const context = Object.create(this);
+    let context = this.socketContexts[socket.id];
+    if (context) return context;
+    context = Object.create(this);
+    this.socketContexts[socket.id] = context;
+    context.req = socket.handshake;
 
     Object.assign(context, {
       socket,
@@ -152,17 +163,22 @@ class Socket extends AutoInit {
       socketSubs: {}
     });
 
-    context.attachSubscriptions();
     socket.on('disconnect', context.onDisconnect);
 
     try {
-      await context.connect({
-        query: socket.request._query,
-        headers: socket.request.headers
-      });
+      context.connectReady = context.connect(context.req, context.req);
+      await context.connectReady;
+      context.attachSubscriptions();
+      socket.emit('connectReady', {name: context.name});
+      return context;
     } catch (err) {
-      socket.emit('connectError', this.constructor.rpcMakeError(err));
-      socket.disconnect(true);
+      socket.emit('connectError', Object.assign(
+        {name: context.name},
+        this.constructor.rpcMakeError(err)
+      ));
+
+      socket.conn.close();
+      throw err;
     }
   }
 
@@ -170,10 +186,11 @@ class Socket extends AutoInit {
   }
 
   async onDisconnection() {
-    await this.disconnect();
+    await this.disconnect(this.req, this.req);
     this.socket.removeListener('disconnect', this.onDisconnect);
     this.detachSubscriptions();
     this.socket.removeAllListeners();
+    delete this.socketContexts[this.socket.id];
     delete this.socket;
     delete this.onDisconnect;
     delete this.socketSubs;
@@ -214,11 +231,19 @@ class Socket extends AutoInit {
 
     Object.assign(this, {
       io,
-      subscriptions: {}
+      subscriptions: {},
+      socketContexts: {}
     });
 
     this.addSubscriptions();
-    io.on('connection', this.onConnection.bind(this));
+
+    io.on('connection', async (socket) => {
+      try {
+        await this.onConnection(socket);
+      } catch (err) {
+        // ignore
+      }
+    });
   }
 
   async finish() {
@@ -226,6 +251,7 @@ class Socket extends AutoInit {
     if (this.primary) await util.promisify(this.io.close).call(this.io);
     delete this.io;
     delete this.subscriptions;
+    delete this.socketContexts;
     await super.finish();
   }
 
