@@ -58,6 +58,9 @@ class Async extends EventEmitter {
     process.on('SIGHUP', () => this.constructor.abort('SIGHUP'));
     process.on('SIGINT', () => this.constructor.abort('SIGINT'));
 
+    process.on('unhandledException', err => this.constructor.throw(err, 'UNHANDLED EXCEPTION'));
+    process.on('unhandledRejection', err => this.constructor.throw(err, 'UNHANDLED PROMISE REJECTION'));
+
     const mainProc = this.main(...process.argv);
 
     if (this.stay) {
