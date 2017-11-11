@@ -26,10 +26,6 @@ class Async extends EventEmitter {
     // virtual
   }
 
-  async throw(err) {
-    throw err;
-  }
-
   static abort(code) {
     return code;
   }
@@ -84,22 +80,26 @@ class Async extends EventEmitter {
       await this.ready;
       code = await this.runMainInited();
     } catch (err) {
-      await this.throw(err);
+      code = await this.throw(err);
     }
 
     return code;
   }
 
-  static throw(err) {
+  static throw(err, type) {
     const error = err || 'unknown';
 
     if (!this.errorSilent) {
       const now = new Date().toISOString();
-      console.log(`>>> ${now} @ CRITICAL\n\n${error.stack || error}`);
+      console.log(`>>> ${now} @ ${type || 'CRITICAL'}\n\n${error.stack || error}`);
     }
 
     const code = isFinite(error.code) ? error.code : 1;
     return code;
+  }
+
+  throw(...args) {
+    return this.constructor.throw(...args);
   }
 
   static waitEvent(context, subs, throws) {
@@ -141,9 +141,17 @@ class Async extends EventEmitter {
     return promise;
   }
 
+  waitEvent(...args) {
+    return this.constructor.waitEvent(...args);
+  }
+
   static delay(msec) {
     const timeout = new Promise(resolve => setTimeout(resolve, msec));
     return timeout;
+  }
+
+  delay(...args) {
+    return this.constructor.delay(...args);
   }
 
   static async timeout(msec, err) {
@@ -151,9 +159,17 @@ class Async extends EventEmitter {
     throw err || 'timeout';
   }
 
+  timeout(...args) {
+    return this.constructor.timeout(...args);
+  }
+
   static tick() {
     const tick = new Promise(resolve => setImmediate(resolve));
     return tick;
+  }
+
+  tick(...args) {
+    return this.constructor.tick(...args);
   }
 
   static async nullAsyncFunc() {

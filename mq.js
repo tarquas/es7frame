@@ -1,227 +1,558 @@
-const AutoInit = require('./auto-init');
-const Async = require('./async');
-const rabbit = require('rabbit.js');
-const uuid = require('uuid');
+const Db = require('./db');
+const Model = require('./model');
+const util = require('util');
 
-class Mq extends AutoInit {
-  // connString : RabbitMQ AMQP Connection String
-  // connOpts [optional] : AMQP connection options
-  // prefix [optional] : prefix to queues
+class Mq extends Model {
+  get pubsubName() { return 'pubsub'; }
+  get queueName() { return 'pubsubQueue'; }
+  get queueEventName() { return 'queue:newTask'; }
 
-  constructor(setup) {
-    super(setup);
-    if (!this.connString) throw new Error('AMQP Connection string is not specified');
-    if (!this.prefix) this.prefix = '';
-    if (!this.connOpts) this.connOpts = {};
+  get schema() {
+    return new this.Schema({
+      _id: String,
+      date: Date,
+      expires: {type: Date, expires: 1},
+      queue: String,
+      message: this.Schema.Types.Mixed
+    }, {
+      collection: this.queueName
+    })
+      .index({queue: 1, date: 1})
+      .index({date: 1});
   }
 
-  async init() {
-    await super.init();
-    this.context = rabbit.createContext(this.connString);
-    await Async.waitEvent(this.context, 'ready', 'error');
-    this.conn = await this.context._connection;
+  async pub(event, payload) {
+    if (this.finishing) return null;
+
+    await this.waitPubsubCollReady;
+
+    const inserted = await util.promisify(this.pubsubColl.insert).call(this.pubsubColl,
+      {event, message: payload},
+      {safe: true}
+    );
+
+    return inserted;
+  }
+
+  sub(event, onData) {
+    if (this.finishing) return null;
+    const workerId = this.workerIdNext++;
+
+    let subHandlers = this.subs[event];
+    if (!subHandlers) this.subs[event] = subHandlers = {};
+
+    const object = {
+      sub: event
+    };
+
+    subHandlers[workerId] = onData;
+    this.workers[workerId] = object;
+    return workerId;
+  }
+
+  async signalQueue(queue) {
+    const inserted = await this.pub(this.queueEventName, queue);
+    return inserted;
+  }
+
+  async push(queue, payload, opts = {}) {
+    if (this.finishing) return null;
+
+    const id = this.newShortId();
+    const now = new Date();
+
+    if (opts.temp) {
+      opts.expires = new Date(+now + this.constructor.defaults.visibilityMsec);
+    }
+
+    const item = new this.Model({
+      _id: id,
+      queue,
+      message: payload,
+      date: now,
+      expires: opts.expires
+    });
+
+    await item.save();
+    await this.signalQueue(queue);
+    return item;
+  }
+
+  async remove(id) {
+    const removed = await this.model.remove({_id: id}).exec();
+    return removed;
+  }
+
+  async requeue(id) {
+    const now = new Date();
+
+    const item = await this.model.findOneAndUpdate(
+      {_id: id},
+      {$set: {date: now}},
+      {select: {queue: 1}}
+    );
+
+    await this.signalQueue(item.queue);
+    return item;
+  }
+
+  async extend(id) {
+    const now = +new Date();
+
+    await this.model.update(
+      {_id: id},
+      {$set: {expires: new Date(now + this.constructor.defaults.visibilityMsec)}}
+    ).exec();
+  }
+
+  async hide(id) {
+    const now = +new Date();
+
+    await this.model.update(
+      {_id: id},
+      {$set: {date: new Date(now + this.constructor.defaults.visibilityMsec)}}
+    ).exec();
+  }
+
+  async workerProlongVisibility(object) {
+    if (object.halt) return;
+
+    if (object.id) {
+      await this.hide(object.id);
+    }
+
+    if (object.halt) return;
+
+    object.prolong = setTimeout(
+      this.workerProlongVisibilityBound,
+      this.constructor.defaults.prolongMsec, object
+    );
+  }
+
+  takeFreeWorker(queue) {
+    const free = this.freeWorkers[queue];
+    if (!free) return false;
+
+    for (const workerId in free) {
+      const worker = this.workers[+workerId];
+      delete free[workerId];
+
+      if (worker.resume) worker.resume();
+
+      for (const id in free) {
+        return true;
+      }
+
+      delete this.freeWorkers[queue];
+
+      return true;
+    }
+
+    return false;
+  }
+
+  setFreeWorker(workerId) {
+    const worker = this.workers[workerId];
+    if (!worker) return false;
+    const queue = worker.queue;
+    let free = this.freeWorkers[queue];
+    if (!free) this.freeWorkers[queue] = free = {};
+    free[`+${workerId}`] = true;
+    return true;
+  }
+
+  worker(queue, onData) {
+    const workerId = this.workerIdNext++;
+
+    const object = {
+      resume: null,
+      wait: null,
+      halt: false,
+      queue: null,
+      id: null,
+      prolong: null
+    };
+
+    this.workers[workerId] = object;
+
+    object.promise = new Promise(async (resolve, reject) => { // eslint-disable-line
+      try {
+        object.queue = queue;
+
+        loop: while (!object.halt) { // eslint-disable-line
+          if (!object.resume) {
+            object.wait = new Promise((resume) => {
+              object.resume = resume;
+            });
+          }
+
+          const now = +new Date();
+
+          const item = await this.model.findOneAndUpdate(
+            {queue, date: {$lt: new Date(now + this.constructor.defaults.accuracyMsec)}},
+            {$set: {date: new Date(now + this.constructor.defaults.visibilityMsec)}},
+            {sort: {date: 1}}
+          );
+
+          if (!item) {
+            this.setFreeWorker(workerId);
+
+            await object.wait;
+
+            object.resume = null;
+            object.wait = null;
+            continue;
+          }
+
+          object.id = item._id;
+
+          if (object.halt) {
+            await this.requeue(object.id);
+            return;
+          }
+
+          object.prolong = setTimeout(
+            this.workerProlongVisibilityBound,
+            this.constructor.defaults.prolongMsec,
+            object
+          );
+
+          try {
+            const decoded = item.message;
+
+            try {
+              if (await onData.call(this, decoded) !== false) {
+                await this.remove(object.id);
+              } else {
+                await this.requeue(object.id);
+              }
+            } catch (err) {
+              await this.requeue(object.id);
+
+              if (!(await this.error(err, {
+                id: queue,
+                msg: item.message,
+                type: 'WORKER'
+              }))) throw err;
+            }
+          } finally {
+            object.id = null;
+            clearTimeout(object.prolong);
+          }
+        }
+      } catch (err) {
+        this.unhandle(workerId);
+        reject(err);
+      }
+    });
+
+    object.promise.catch((err) => {
+      this.error(err, {id: 'global', msg: '', type: 'WORKER'});
+    });
+
+    return workerId;
+  }
+
+  async rpc(queue, payload) {
+    if (this.finishing) return undefined;
+    const rpcId = this.newShortId();
+
+    let response;
+    const waitResponse = new Promise((resolve) => { response = resolve; });
+    let timer;
+
+    const waitTimer = new Promise((resolve) => {
+      timer = setTimeout(resolve, this.constructor.defaults.visibilityMsec);
+    });
+
+    const workerId = this.worker(rpcId, response);
+    await this.push(queue, {rpcId, args: payload}, {temp: true}); // TODO: long in time RPC
+
+    const msg = await Promise.race([
+      waitResponse,
+      waitTimer,
+      this.waitTerminate
+    ]);
+
+    clearTimeout(timer);
+    this.unhandle(workerId);
+    return msg;
+  }
+
+  rpcworker(queue, onData) {
+    const workerId = this.worker(queue, async (msg) => {
+      const result = await onData.call(this, msg.args);
+      await this.push(msg.rpcId, result, {temp: true});
+    });
+
+    return workerId;
+  }
+
+  async unhandle(workerId) { // eslint-disable-line
+    const object = this.workers[workerId];
+    if (!object) return;
+
+    object.halt = true;
+    delete this.workers[workerId];
+
+    if (object.prolong) {
+      clearTimeout(object.prolong);
+      object.prolong = null;
+    }
+
+    if (object.resume) {
+      object.resume();
+    }
+
+    if (object.id) {
+      // await this.requeue(object.id);
+      // TODO: consider whether should requeue with worker in progress
+    }
+
+    if (object.subwait) object.subwait.resolve();
+
+    if (object.sub) {
+      const subHandlers = this.subs[object.sub];
+
+      if (subHandlers) {
+        delete subHandlers[workerId];
+
+        for (const id in subHandlers) { // eslint-disable-line
+          object.sub = null;
+          break;
+        }
+
+        if (object.sub) {
+          delete this.subs[object.sub];
+          object.sub = null;
+        }
+      }
+    }
   }
 
   async error(err, {id, type}) {
+    await this.init;
     const now = new Date().toISOString();
 
     if (!this.errorSilent) {
       console.log(`>>> ${now} @ MQ ${type.toUpperCase()} ${id}\n\n${err.stack || err}`);
     }
+
+    return true;
   }
 
-  static objToBuffer(obj) {
-    const data = new Buffer(JSON.stringify(obj), 'utf8');
-    return data;
+  async info(queue) {
+    const count = await this.model.find({queue}).count().exec();
+    const result = {messageCount: count};
+    return result;
   }
 
-  static bufferToObj(buffer) {
-    const decoded = JSON.parse(buffer.toString('utf8'));
-    return decoded;
+  async deleteIfSafe() {
+    // STUB: if safe it's like autodeleted by arch
   }
 
-  async getQueueStatus(id) {
-    const ch = await this.conn.createChannel();
-    const queue = `${this.prefix}${id}`;
+  async pubsubLoop() { // eslint-disable-line
+    while (!this.finishing) {
+      try {
+        const db = this.capDb.conn.db;
+        let coll = this.pubsubColl;
 
-    try {
-      const info = await ch.assertQueue(queue, {durable: true});
-      return info;
-    } finally {
-      ch.close();
-    }
-  }
+        if (!coll) {
+          coll = await util.promisify(db.createCollection).call(db,
+            this.pubsubName,
 
-  async handler(id, onData, type, queueOpts, process) {
-    const ch = await this.conn.createChannel();
-    const queue = `${this.prefix}${id}`;
+            {
+              capped: true,
+              autoIndexId: true,
+              size: this.constructor.defaults.pubsubCapSize,
+              strict: false
+            }
+          );
 
-    await ch.assertQueue(queue, queueOpts);
-    ch.prefetch(1);
+          this.pubsubColl = coll;
+          this.pubsubCollReady();
+          this.pubsubCollReady = null;
+          this.waitPubsubCollReady = null;
+        }
 
-    await ch.consume(queue, async (msg) => {
-      if (!msg) return;
-
-      if (process) {
-        await process.call(this, id, onData, {ch, type, queueOpts, msg});
-      } else {
-        const decoded = this.constructor.bufferToObj(msg.content);
+        const query = coll.find(
+          this.latest ? {_id: this.latest._id } : null,
+          {timeout: false}
+        ).sort({_id: -1}).limit(1);
 
         try {
-          await onData(decoded);
-        } catch (err) {
-          if (!(await this.error(err, {id, msg, type}))) throw err;
+          this.latest = await util.promisify(query.nextObject).call(query);
+        } finally {
+          query.close();
         }
+
+        if (!this.latest) {
+          const docs = await util.promisify(coll.insert).call(coll, {dummy: true}, {safe: true});
+          this.latest = docs.ops[0];
+        }
+
+        if (this.finishing || this.capDb.conn._closeCalled) return;
+
+        const cursor = coll.find(
+          { _id: { $gt: this.latest._id }},
+
+          {
+            tailable: true,
+            awaitData: true,
+            timeout: false,
+            sortValue: {$natural: -1},
+            numberOfRetries: Number.MAX_VALUE,
+            tailableRetryInterval: this.constructor.defaults.tailableRetryInterval
+          }
+        );
+
+        try {
+          while (!this.finishing) {
+            this.latest = await Promise.race([
+              util.promisify(cursor.nextObject).call(cursor),
+              this.waitTerminate
+            ]);
+
+            if (!this.latest) break;
+
+            const event = this.latest.event;
+            const message = this.latest.message;
+
+            (async () => { // eslint-disable-line
+              const subHandlers = this.subs[event];
+
+              if (subHandlers) {
+                for (const workerId in subHandlers) {
+                  const worker = this.workers[workerId];
+                  if (!worker) continue;
+
+                  try {
+                    let wait = this.subWait[event];
+                    if (wait) await wait.promise;
+                    if (this.finishing) return delete this.subWait[event];
+                    let process = subHandlers[workerId].call(this, message);
+
+                    if (process instanceof Promise) {
+                      this.subWait[event] = wait = {};
+                      worker.subwait = wait;
+                      wait.promise = new Promise((resolve) => { wait.resolve = resolve; });
+                      process = await process;
+                      worker.subwait = null;
+                      wait.resolve();
+                    }
+
+                    delete this.subWait[event];
+                    if (process === false) break;
+                  } catch (err) {
+                    if (!(await this.error(err, {
+                      id: event,
+                      msg: message,
+                      type: 'SUB'
+                    }))) break;
+                  }
+                }
+              }
+
+              return true;
+            })()
+              .catch((err) => {
+                console.log('PubSub Handler Fail:', err.stack || err);
+              });
+          }
+        } finally {
+          cursor.close();
+        }
+
+        break;
+      } catch (err) {
+        if (this.capDb.conn._closeCalled) return;
+        if (err.code === 17399) continue;
+        throw err;
       }
-
-      ch.ack(msg);
-    }, {noAck: false});
-
-    const handlerId = Mq.nextHandlerId++;
-    Mq.handlers[handlerId] = ch;
-    return handlerId;
-  }
-
-  async push(id, payload) {
-    const ch = await this.conn.createChannel();
-    const queue = `${this.prefix}${id}`;
-
-    try {
-      await ch.assertQueue(queue, {durable: true});
-      const data = this.constructor.objToBuffer(payload);
-      const sent = await ch.sendToQueue(queue, data, {persistent: true});
-      return sent;
-    } finally {
-      ch.close();
     }
   }
 
-  async worker(id, onData) {
-    const handlerId = await this.handler(id, onData, 'worker', {durable: true});
-    return handlerId;
-  }
+  async init() {
+    await super.init();
 
-  async rpc(id, payload) {
-    const ch = await this.conn.createChannel();
-    const queue = `${this.prefix}${id}`;
-
-    try {
-      const corrId = uuid();
-      const qok = await ch.assertQueue('', {exclusive: true});
-
-      const promise = new Promise(async (resolve, reject) => {
-        await ch.consume(qok.queue, (msg) => {
-          if (msg.properties.correlationId === corrId) {
-            const decoded = this.constructor.bufferToObj(msg.content);
-
-            if (decoded.error) {
-              if (decoded.error.isError) {
-                const toThrow = new Error(decoded.error.message);
-                if (decoded.error.stack) toThrow.stack = decoded.error.stack;
-                reject(toThrow);
-              } else reject(decoded.error);
-            } else resolve(decoded.data);
-          }
-        });
+    if (this.capConnString) {
+      this.capDb = new Db({
+        connString: this.capConnString,
+        prefix: this.capPrefix
       });
 
-      const data = this.constructor.objToBuffer(payload);
-      await ch.sendToQueue(queue, data, {correlationId: corrId, replyTo: qok.queue});
-
-      const result = await promise;
-      return result;
-    } catch (err) {
-      if (!(await this.error(err, {id, msg: payload, type: 'rpc'}))) throw err;
-    } finally {
-      ch.close();
+      this.tempCapDb = true;
     }
 
-    return null;
-  }
+    if (this.connString) {
+      this.db = new Db({
+        connString: this.capConnString,
+        prefix: this.capPrefix
+      });
 
-  static rpcMakeError(err) {
-    if (err instanceof Error) {
-      const encErr = {isError: true, message: err.message, stack: err.stack};
-      return {error: encErr};
+      this.tempDb = true;
     }
 
-    return {error: err};
-  }
-
-  async rpcWorkerProcess(id, onData, {ch, type, msg}) {
-    const decoded = this.constructor.bufferToObj(msg.content);
-    let response;
-
-    try {
-      response = {data: await onData(decoded)};
-    } catch (err) {
-      response = this.constructor.rpcMakeError(err);
+    if (!this.capDb) {
+      this.capDb = this.db;
     }
 
-    const data = this.constructor.objToBuffer(response);
+    this.subs = {};
+    this.subWait = {};
+    this.workers = {};
+    this.workerIdNext = 1;
+    this.freeWorkers = {};
+    await this.db.ready;
 
-    try {
-      await ch.sendToQueue(
-        msg.properties.replyTo,
-        data,
-        {correlationId: msg.properties.correlationId}
-      );
-    } catch (err) {
-      if (await this.error(err, {id, msg, type})) throw err;
-    }
-  }
+    this.workerProlongVisibilityBound = this.workerProlongVisibility.bind(this);
+    await this.sub(this.queueEventName, this.takeFreeWorker);
 
-  async rpcworker(id, onData) {
-    const handlerId = await this.handler(id, onData, 'rpcworker', {durable: false}, this.rpcWorkerProcess);
-    return handlerId;
-  }
-
-  async pub(id, payload) {
-    const queue = `${this.prefix}${id}`;
-    const pub = this.context.socket('PUBLISH');
-
-    try {
-      await new Promise(resolve => pub.connect(queue, resolve));
-      pub.write(JSON.stringify(payload, null, 2), 'utf8');
-    } finally {
-      pub.ch.close();
-    }
-  }
-
-  async sub(id, onData) {
-    const queue = `${this.prefix}${id}`;
-    const sub = this.context.socket('SUBSCRIBE');
-    await new Promise(resolve => sub.connect(queue, resolve));
-    sub.setEncoding('utf8');
-
-    sub.on('data', async (data) => {
-      try {
-        const obj = JSON.parse(data);
-        await onData(obj);
-      } catch (err) {
-        await this.error(err, {id, msg: data, type: 'sub'});
-      }
+    this.waitPubsubCollReady = new Promise((resolve) => {
+      this.pubsubCollReady = resolve;
     });
 
-    const handlerId = Mq.nextHandlerId++;
-    Mq.handlers[handlerId] = sub.ch;
-    return handlerId;
-  }
+    this.waitTerminate = new Promise((resolve) => {
+      this.terminate = resolve;
+    });
 
-  async unhandle(handlerId) {
-    const ch = Mq.handlers[handlerId];
-    if (!ch) return;
-    ch.close();
-    delete Mq.handlers[handlerId];
+    this.pubsubLoop().catch((err) => {
+      console.log('PubSub Loop Fatal:', err.stack || err);
+    });
   }
 
   async finish() {
-    this.conn.close();
+    if (this.finishing) return;
+    this.finishing = true;
+    this.terminate();
+    this.terminate = null;
+    this.waitTerminate = null;
+    this.pubsubCollReady = null;
+    this.waitPubsubCollReady = null;
+
+    await this.workers.map(workerId => this.unhandle(workerId));
+
+    for (const event in this.subWait) {
+      const wait = this.subWait[event];
+      if (wait) wait.resolve();
+      this.subWait[event] = null;
+    }
+
+    this.workerProlongVisibilityBound = null;
     await super.finish();
+    if (this.tempDb) await this.db.finish();
+    if (this.tempCapDb) await this.capDb.finish();
+    this.db = null;
+    this.capDb = null;
   }
 }
 
-Mq.handlers = {};
-Mq.nextHandlerId = 0;
+Mq.defaults = {
+  visibilityMsec: 180000,
+  pubsubCapSize: 1024 * 1024 * 5,
+  tailableRetryInterval: 2000
+};
+
+Mq.defaults.accuracyMsec = Mq.defaults.visibilityMsec / 3;
+Mq.defaults.prolongMsec = Mq.defaults.accuracyMsec;
 
 module.exports = Mq;

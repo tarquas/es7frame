@@ -14,8 +14,11 @@
     }
   },
   "rules": {
-    "complexity": ["error", 5],
+    "complexity": ["error", 6],
+    "guard-for-in": "off",
+    "no-await-in-loop": "off",
     "no-bitwise": ["warn", {"int32Hint": true}],
+    "no-continue": "off",
     "no-console": "off",
     "no-plusplus": "off",
     "no-underscore-dangle": "off",

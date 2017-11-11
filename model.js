@@ -1,48 +1,40 @@
 const AutoInit = require('./auto-init');
-const Crypt = require('./crypt');
 
 class Model extends AutoInit {
   // db -- database (class Db) connection
 
-  constructor(setup) {
-    super(setup);
-    this.Schema = this.db.common.Schema;
-    this.errors = this.constructor.errors;
-  }
-
   async init() {
     await super.init();
+
+    this.Schema = this.db.common.Schema;
+    this.errors = this.constructor.errors;
+
     const schema = this.schema;
     this._schema = schema;
     const collection = schema.options.collection;
     if (this.db.prefix) schema.options.collection = `${this.db.prefix}${collection}`;
     let name = this.name;
     if (!name) this.name = name = collection;
-    this.model = this.db.conn.model(name, schema);
+    this.model = this.Model = this.db.conn.model(name, schema);
   }
 
   newObjectId() {
-    const objectId = new this.db.common.Types.ObjectId();
+    const objectId = this.db.newObjectId();
     return objectId;
   }
 
   newShortId() {
-    const objectId = this.newObjectId();
-    const shortId = this.toShortId(objectId);
+    const shortId = this.db.newShortId();
     return shortId;
   }
 
   toShortId(objectId) {
-    const hex = objectId.toString().padStart(24, '0');
-    const base64 = new Buffer(hex, 'hex').toString('base64');
-    const shortId = Crypt.toUrlSafe(base64);
+    const shortId = this.db.toShortId(objectId);
     return shortId;
   }
 
   fromShortId(shortId) {
-    const base64 = Crypt.fromUrlSafe(shortId);
-    const hex = new Buffer(base64, 'base64').toString('hex');
-    const objectId = new this.db.common.Types.ObjectId(hex);
+    const objectId = this.db.fromShortId(shortId);
     return objectId;
   }
 }

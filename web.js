@@ -11,13 +11,6 @@ class Web extends AutoInit {
   // httpsOpts : HTTPS connection options
   // prefix : prefix paths with given string
 
-  constructor(setup) {
-    super(setup);
-    if (!this.prefix) this.prefix = '';
-    this.bind = this.httpBind || this.httpsBind;
-    this.createServers();
-  }
-
   createServers() {
     const bind = `WEB ${this.bind}`;
     const exists = Web.binds[bind];
@@ -50,6 +43,10 @@ class Web extends AutoInit {
 
   async init() {
     await super.init();
+
+    if (!this.prefix) this.prefix = '';
+    this.bind = this.httpBind || this.httpsBind;
+    this.createServers();
 
     if (this.primary) {
       if (this.http) await util.promisify(this.http.listen).call(this.http, this.httpBind);
