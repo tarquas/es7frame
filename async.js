@@ -3,6 +3,7 @@ const EventEmitter = require('events');
 class Async extends EventEmitter {
   constructor() {
     super();
+    this.static = this.constructor;
     this.ready = this.init();
     this.ready.catch(() => true);
     this.finishTimeout = this.constructor.finishTimeoutMsec;
@@ -200,7 +201,7 @@ function holdOn(init) {
 }
 
 function getLauncherFromMain() {
-  const main = require.main;
+  const {main} = require;
   if (!main) return null;
 
   const Launcher = main.exports;

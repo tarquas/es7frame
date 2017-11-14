@@ -1,4 +1,5 @@
 const AutoInit = require('./auto-init');
+const basicAuth = require('basic-auth');
 const express = require('express');
 const http = require('http');
 const https = require('https');
@@ -44,6 +45,10 @@ class Web extends AutoInit {
   async init() {
     await super.init();
 
+    ['basicAuth', 'express', 'serveStatic'].forEach((key) => {
+      this[key] = this.constructor[key];
+    });
+
     if (!this.prefix) this.prefix = '';
     this.bind = this.httpBind || this.httpsBind;
     this.createServers();
@@ -79,6 +84,7 @@ class Web extends AutoInit {
   }
 }
 
+Object.assign(Web, {express, serveStatic: express.static, basicAuth});
 Web.binds = {};
 
 module.exports = Web;

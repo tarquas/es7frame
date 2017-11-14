@@ -16,6 +16,7 @@
   "rules": {
     "complexity": ["error", 6],
     "guard-for-in": "off",
+    "no-restricted-globals": "off",
     "no-await-in-loop": "off",
     "no-bitwise": ["warn", {"int32Hint": true}],
     "no-continue": "off",

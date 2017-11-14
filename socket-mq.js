@@ -9,7 +9,7 @@ const adapterMaker = (mq, options) => {
   }, options);
 
   const myId = Db.newShortId();
-  const prefix = opts.prefix;
+  const {prefix} = opts;
 
   const getChannelName = (...args) => (args.join(opts.channelSeperator) + opts.channelSeperator);
 

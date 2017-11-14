@@ -30,7 +30,7 @@ class Db extends AutoInit {
 
   static toShortId(objectId) {
     const hex = objectId.toString().padStart(24, '0');
-    const base64 = new Buffer(hex, 'hex').toString('base64');
+    const base64 = Buffer.from(hex, 'hex').toString('base64');
     const shortId = Crypt.toUrlSafe(base64);
     return shortId;
   }
@@ -41,7 +41,7 @@ class Db extends AutoInit {
 
   static fromShortId(shortId) {
     const base64 = Crypt.fromUrlSafe(shortId);
-    const hex = new Buffer(base64, 'base64').toString('hex');
+    const hex = Buffer.from(base64, 'base64').toString('hex');
     const objectId = new this.db.common.Types.ObjectId(hex);
     return objectId;
   }

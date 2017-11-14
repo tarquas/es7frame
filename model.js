@@ -9,11 +9,11 @@ class Model extends AutoInit {
     this.Schema = this.db.common.Schema;
     this.errors = this.constructor.errors;
 
-    const schema = this.schema;
+    const {schema} = this;
     this._schema = schema;
-    const collection = schema.options.collection;
+    const {collection} = schema.options;
     if (this.db.prefix) schema.options.collection = `${this.db.prefix}${collection}`;
-    let name = this.name;
+    let {name} = this;
     if (!name) this.name = name = collection;
     this.model = this.Model = this.db.conn.model(name, schema);
   }

@@ -85,6 +85,8 @@ class Rest extends AutoInit {
   async init() {
     await super.init();
 
+    this.serveStatic = this.web.serveStatic;
+
     for (const action of Object.getOwnPropertyNames(Object.getPrototypeOf(this))) {
       this.addRoute(action);
     }

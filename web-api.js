@@ -31,7 +31,7 @@ class WebApi extends Web {
   }
 
   get errors() {
-    const errors = this.constructor.errors;
+    const {errors} = this.constructor;
     return errors;
   }
 

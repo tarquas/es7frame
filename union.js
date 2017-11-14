@@ -9,7 +9,7 @@ const unionMaker = (Class) => {
   class Union extends Class {
     static get defaultInstance() {
       if (!this.currentInst) {
-        const desc = this.desc;
+        const {desc} = this;
         const obj = new this(desc.defaultInit);
         this.currentInst = obj;
         const depInsts = {};
@@ -28,7 +28,7 @@ const unionMaker = (Class) => {
 
     async init() {
       await super.init();
-      const desc = this.constructor.desc;
+      const {desc} = this.constructor;
 
       this.memberKeys = [];
       this.depKeys = Object.keys(desc.deps);
@@ -55,7 +55,7 @@ const unionMaker = (Class) => {
     }
 
     async finish() {
-      const desc = this.constructor.desc;
+      const {desc} = this.constructor;
       const readiness = [];
 
       for (const member in desc.members) {

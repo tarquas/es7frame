@@ -26,7 +26,8 @@ class Mq extends Model {
 
     await this.waitPubsubCollReady;
 
-    const inserted = await util.promisify(this.pubsubColl.insert).call(this.pubsubColl,
+    const inserted = await util.promisify(this.pubsubColl.insert).call(
+      this.pubsubColl,
       {event, message: payload},
       {safe: true}
     );
@@ -154,7 +155,7 @@ class Mq extends Model {
   setFreeWorker(workerId) {
     const worker = this.workers[workerId];
     if (!worker) return false;
-    const queue = worker.queue;
+    const {queue} = worker;
     let free = this.freeWorkers[queue];
     if (!free) this.freeWorkers[queue] = free = {};
     free[`+${workerId}`] = true;
@@ -354,11 +355,12 @@ class Mq extends Model {
   async pubsubLoop() { // eslint-disable-line
     while (!this.finishing) {
       try {
-        const db = this.capDb.conn.db;
+        const {db} = this.capDb.conn;
         let coll = this.pubsubColl;
 
         if (!coll) {
-          coll = await util.promisify(db.createCollection).call(db,
+          coll = await util.promisify(db.createCollection).call(
+            db,
             this.pubsubName,
 
             {
@@ -388,7 +390,7 @@ class Mq extends Model {
 
         if (!this.latest) {
           const docs = await util.promisify(coll.insert).call(coll, {dummy: true}, {safe: true});
-          this.latest = docs.ops[0];
+          [this.latest] = docs.ops;
         }
 
         if (this.finishing || this.capDb.conn._closeCalled) return;
@@ -415,8 +417,7 @@ class Mq extends Model {
 
             if (!this.latest) break;
 
-            const event = this.latest.event;
-            const message = this.latest.message;
+            const {event, message} = this.latest;
 
             (async () => { // eslint-disable-line
               const subHandlers = this.subs[event];

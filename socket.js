@@ -205,9 +205,9 @@ class Socket extends AutoInit {
 
   async init() {
     await super.init();
-    const endpoint = this.endpoint;
+    const {endpoint} = this;
 
-    const binds = this.web.constructor.binds;
+    const {binds} = this.web.constructor;
     const bind = `WEBSOCKET ${endpoint}`;
     let io = binds[bind];
 

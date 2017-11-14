@@ -29,7 +29,7 @@ class Mq extends AutoInit {
   }
 
   static objToBuffer(obj) {
-    const data = new Buffer(JSON.stringify(obj), 'utf8');
+    const data = Buffer.from(JSON.stringify(obj), 'utf8');
     return data;
   }
 
@@ -90,7 +90,9 @@ class Mq extends AutoInit {
       if (!msg) return;
 
       if (process) {
-        if (await process.call(this, id, onData, {ch, type, queueOpts, msg}) !== false) {
+        if (await process.call(this, id, onData, {
+          ch, type, queueOpts, msg
+        }) !== false) {
           ch.ack(msg);
         }
       } else {

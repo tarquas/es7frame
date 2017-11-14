@@ -21,7 +21,7 @@ class Crypt {
   encrypt(text) {
     const noiseHex = parseInt(Math.random() * 0xffffff, 10).toString(16);
     const noiseHexA = ('000000').substr(noiseHex.length) + noiseHex;
-    const noise64 = new Buffer(noiseHexA, 'hex').toString('base64');
+    const noise64 = Buffer.from(noiseHexA, 'hex').toString('base64');
 
     const cipher = crypto.createCipher(this.algorithm, this.password);
     let crypted = cipher.update(noise64 + text, 'base64', 'base64');
@@ -44,7 +44,7 @@ class Crypt {
 
   static parseUserId(userId) {
     if (!userId) return null;
-    if (userId.length === 24) return new Buffer(userId, 'hex').toString('base64');
+    if (userId.length === 24) return Buffer.from(userId, 'hex').toString('base64');
     if (userId.length === 16) return this.fromUrlSafe(userId);
     return null;
   }
@@ -56,12 +56,12 @@ class Crypt {
   // }
 
   getToken(tokenData) {
-    const userId = tokenData.userId;
+    const {userId} = tokenData;
     const userIdA = this.constructor.parseUserId(userId);
 
     if (!userIdA || userIdA.length !== 16) throw new Error('Token User ID is invalid');
 
-    const buf = new Buffer(6);
+    const buf = Buffer.alloc(6);
     buf.writeIntBE(tokenData.expiresAt / 86400000, 0, 3);
     buf.writeIntLE(tokenData.rev - 0, 3, 3);
 
@@ -79,14 +79,14 @@ class Crypt {
     if (text.length !== 24) return null;
     const result = {};
 
-    const buf = new Buffer(text.substr(16, 8), 'base64');
+    const buf = Buffer.from(text.substr(16, 8), 'base64');
     result.expiresAt = new Date(buf.readIntBE(0, 3) * 86400000);
     if (result.expiresAt < new Date()) return null;
     result.rev = buf.readIntLE(3, 3);
 
     const userId = text.substr(0, 16);
     if (format === 'base64') result.userId = userId;
-    else if (format) result.userId = new Buffer(userId, 'base64').toString(format);
+    else if (format) result.userId = Buffer.from(userId, 'base64').toString(format);
     else result.userId = this.constructor.toUrlSafe(userId);
 
     return result;
