@@ -55,16 +55,19 @@ class Db extends AutoInit {
     this.common = this.constructor.common;
 
     if (!this.connString) throw new Error('MongoDB Connection string is not specified');
-    if (!this.connOpts) this.connOpts = {};
+    if (!this.connOpts) this.connOpts = {ssl: true};
     if (!this.prefix) this.prefix = '';
 
-    await new Promise((resolve, reject) => {
-      this.conn = this.common.createConnection(
-        this.connString,
-        this.connOpts,
-        (err, res) => (err ? reject(err) : resolve(res))
-      );
+    Object.assign(this.connOpts, {
+      useMongoClient: true,
+      autoReconnect: true,
+      bufferMaxEntries: 0
     });
+
+    this.conn = await this.common.createConnection(
+      this.connString,
+      this.connOpts
+    );
   }
 
   async finish() {
