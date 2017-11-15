@@ -479,6 +479,7 @@ class Mq extends Model {
     if (this.capConnString) {
       this.capDb = new Db({
         connString: this.capConnString,
+        connOpts: this.capConnOpts,
         prefix: this.capPrefix
       });
 
@@ -487,8 +488,9 @@ class Mq extends Model {
 
     if (this.connString) {
       this.db = new Db({
-        connString: this.capConnString,
-        prefix: this.capPrefix
+        connString: this.connString,
+        connOpts: this.connOpts,
+        prefix: this.prefix
       });
 
       this.tempDb = true;
