@@ -13,7 +13,13 @@ class Async extends EventEmitter {
   }
 
   async init() {
-    if (this.ready) throw new Error(`Async: explicit call of 'init()' on ${Object.getPrototypeOf(this).constructor.name} is not allowed`);
+    if (!this.delayedInit) {
+      if (this.ready) throw new Error(`Async: explicit call of 'init()' on ${Object.getPrototypeOf(this).constructor.name} is not allowed`);
+    } else {
+      await this.delayedInit;
+      this.delayedInit = null;
+    }
+
     await new Promise(resolve => setImmediate(resolve));
   }
 
@@ -40,7 +46,7 @@ class Async extends EventEmitter {
       if (Object.hasOwnProperty.call(Async.instances, instanceId)) {
         const instance = Async.instances[instanceId];
         const timeout = Async.delay(instance.finishTimeout);
-        const finish = instance.finish().catch(() => true);
+        const finish = instance.finish().catch((err) => this.throw(err, 'IN FINALIZER'));
         await Promise.race([timeout, finish]); // eslint-disable-line
       }
     }

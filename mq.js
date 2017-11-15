@@ -474,7 +474,8 @@ class Mq extends Model {
   }
 
   async init() {
-    await super.init();
+    this.delayedInit = true;
+    await this.tick();
 
     if (this.capConnString) {
       this.capDb = new Db({
@@ -500,12 +501,14 @@ class Mq extends Model {
       this.capDb = this.db;
     }
 
+    await this.db.ready;
+    await super.init();
+
     this.subs = {};
     this.subWait = {};
     this.workers = {};
     this.workerIdNext = 1;
     this.freeWorkers = {};
-    await this.db.ready;
 
     this.workerProlongVisibilityBound = this.workerProlongVisibility.bind(this);
     await this.sub(this.queueEventName, this.takeFreeWorker);
@@ -532,7 +535,7 @@ class Mq extends Model {
     this.pubsubCollReady = null;
     this.waitPubsubCollReady = null;
 
-    await this.workers.map(workerId => this.unhandle(workerId));
+    await Object.keys(this.workers).map(workerId => this.unhandle(workerId));
 
     for (const event in this.subWait) {
       const wait = this.subWait[event];
