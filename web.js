@@ -12,6 +12,8 @@ class Web extends AutoInit {
   // httpsOpts : HTTPS connection options
   // prefix : prefix paths with given string
 
+  static get type() { return 'web'; }
+
   createServers() {
     const bind = `WEB ${this.bind}`;
     const exists = Web.binds[bind];

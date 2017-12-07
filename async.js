@@ -4,13 +4,25 @@ class Async extends EventEmitter {
   constructor() {
     super();
     this.static = this.constructor;
+    this.dependents = {};
+    this.depFinishing = {};
+
+    this.waitFinish = new Promise((resolve) => {
+      this.signalFinish = resolve;
+    });
+
     this.ready = this.init();
-    this.ready.catch(() => true);
     this.finishTimeout = this.constructor.finishTimeoutMsec;
     this.instanceId = Async.nextInstanceId++;
     this[Async.isAsync] = true;
     Async.instances[this.instanceId] = this;
+
+    this.anywayReady = this.ready.catch(() => {
+      this.initFailed = true;
+    });
   }
+
+  static get type() { return 'main'; }
 
   async init() {
     if (!this.delayedInit) {
@@ -27,6 +39,7 @@ class Async extends EventEmitter {
     delete Async.instances[this.instanceId];
     this.finish = Async.nullAsyncFunc;
     this.finished = true;
+    this.signalFinish();
   }
 
   async main() {
@@ -42,14 +55,23 @@ class Async extends EventEmitter {
   }
 
   static async finishAllInstances() {
-    for (const instanceId in Async.instances) {
-      if (Object.hasOwnProperty.call(Async.instances, instanceId)) {
-        const instance = Async.instances[instanceId];
-        const timeout = Async.delay(instance.finishTimeout);
-        const finish = instance.finish().catch((err) => this.throw(err, 'IN FINALIZER'));
-        await Promise.race([timeout, finish]); // eslint-disable-line
-      }
-    }
+    await Promise.all(Reflect.ownKeys(Async.instances).map(async (instanceId) => {
+      const instance = Async.instances[instanceId];
+      instance.shutdown = true;
+      await instance.anywayReady;
+
+      await Promise.all(Reflect.ownKeys(instance.dependents).map(async (depdId) => {
+        const depd = Async.instances[depdId];
+        if (!depd) return;
+        instance.depFinishing[depdId] = true;
+        if (depd.depFinishing[instanceId]) return;
+        await depd.waitFinish;
+      }));
+
+      const timeout = Async.delay(instance.finishTimeout);
+      const finish = instance.finish().catch(err => this.throw(err, 'IN FINALIZER'));
+      await Promise.race([timeout, finish]); // eslint-disable-line
+    }));
   }
 
   async runMainInited() {
@@ -230,7 +252,7 @@ async function master() {
     holdOn(true);
 
     try {
-      const session = new Launcher();
+      const session = Launcher.defaultInstance || new Launcher();
       code = await session.runMain();
       if (code === false) return;
     } finally {

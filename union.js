@@ -1,23 +1,25 @@
 const unionMaker = (Class) => {
   // After module exporting, please extend Union.desc object with following:
-  //   type: a field name, which members get the union circular reference to.
+  //   type (optional): a field name, which members get the union circular reference to.
   //   members: dictionary of AutoInit-derived classes to be instantiated with specifying union
   //     and deps in corresponding fields.
   //   deps: dictionary of AutoInits to be initialized at current AutoInit's space.
-  //   defaultInit: params which initialize defaultInstance.
+  //   config: params which initialize 'Union.inst'.
 
   class Union extends Class {
+    static get inst() {
+      return this.defaultInstance;
+    }
+
     static get defaultInstance() {
       if (!this.currentInst) {
         const {desc} = this;
-        const obj = new this(desc.defaultInit);
+        const obj = new this(desc.config || desc.defaultInit);
         this.currentInst = obj;
         const depInsts = {};
 
         for (const dep in desc.deps) {
-          if (Object.hasOwnProperty.call(desc.deps, dep)) {
-            depInsts[dep] = desc.deps[dep].defaultInstance;
-          }
+          depInsts[dep] = desc.deps[dep].defaultInstance;
         }
 
         Object.assign(obj, depInsts);
@@ -26,56 +28,68 @@ const unionMaker = (Class) => {
       return this.currentInst;
     }
 
+    async initDeps() {
+      await Promise.all(this.depKeys.map(async (dep) => {
+        const inst = this[dep];
+        inst.dependents[this.instanceId] = true;
+        if (!inst) return;
+        if (inst.depInit) return;
+        inst.depInit = true;
+        await inst.ready;
+      }));
+    }
+
+    async initMembers() {
+      const {desc} = this.constructor;
+
+      await Promise.all(this.memberKeys.map(async (member) => {
+        const init = {};
+        if (desc.type) init[desc.type] = this;
+        Object.assign(init, ...this.depKeys.map(key => ({[key]: this[key]})));
+        const inst = new desc.members[member](init);
+        this[member] = inst;
+        inst.dependents[this.instanceId] = true;
+        await inst.ready;
+      }));
+    }
+
     async init() {
       await super.init();
       const {desc} = this.constructor;
 
-      this.memberKeys = [];
       this.depKeys = Object.keys(desc.deps);
+      this.memberKeys = Object.keys(desc.members);
 
-      const readiness = [];
-
-      for (const dep of this.depKeys) {
-        const inst = this[dep];
-        if (inst && !inst[desc.type]) readiness.push(inst.ready);
-      }
-
-      for (const member in desc.members) {
-        if (Object.hasOwnProperty.call(desc.members, member)) {
-          const init = {[desc.type]: this};
-          Object.assign(init, ...this.depKeys.map(key => ({[key]: this[key]})));
-          const inst = new desc.members[member](init);
-          this[member] = inst;
-          readiness.push(inst.ready);
-          this.memberKeys.push(member);
-        }
-      }
-
-      await Promise.all(readiness);
+      await this.initDeps();
+      await this.initMembers();
     }
 
     async finish() {
-      const {desc} = this.constructor;
-      const readiness = [];
+      const {desc, nullAsyncFunc} = this.constructor;
 
-      for (const member in desc.members) {
-        if (Object.hasOwnProperty.call(desc.members, member)) {
+      if (this.memberKeys) {
+        await Promise.all(this.memberKeys.map(async (member) => {
           const inst = this[member];
+          if (!inst) return;
           const finishFunc = inst.finish;
-          inst.finish = Union.nullAsyncFunc;
-          const ready = finishFunc.call(inst);
-          readiness.push(ready);
+          inst.finish = nullAsyncFunc;
+          await finishFunc.call(inst);
           delete this[member][desc.type];
           delete this[member];
-        }
+        }));
       }
 
-      await Promise.all(readiness);
       await super.finish();
     }
   }
 
-  Union.desc = {};
+  Union.desc = {
+    type: Class.type,
+    members: {},
+    deps: {},
+    defaultInit: {}
+  };
+
   return Union;
 };
 

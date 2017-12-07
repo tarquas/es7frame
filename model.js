@@ -3,6 +3,8 @@ const AutoInit = require('./auto-init');
 class Model extends AutoInit {
   // db -- database (class Db) connection
 
+  static get type() { return 'model'; }
+
   async init() {
     await super.init();
 

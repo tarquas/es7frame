@@ -3,6 +3,8 @@ const AutoInit = require('./auto-init');
 class Rest extends AutoInit {
   // web -- webserver (class Web) instance
 
+  static get type() { return 'rest'; }
+
   async express(middleware, req) {
     const result = await new Promise((resolve, reject) => {
       try {
@@ -75,11 +77,15 @@ class Rest extends AutoInit {
     const [matched, method, path, middleware] = action.match(this.constructor.rxMethodPath) || [];
     if (!matched) return;
     const handler = customHandler || this[action];
+    const func = this.web.app[method.toLowerCase()];
 
-    this.web.app[method.toLowerCase()](
-      `${this.web.prefix}${path}`,
-      this.wrapToMiddleware(handler, middleware)
-    );
+    if (func) {
+      func.call(
+        this.web.app,
+        `${this.web.prefix}${path}`,
+        this.wrapToMiddleware(handler, middleware)
+      );
+    }
   }
 
   async init() {

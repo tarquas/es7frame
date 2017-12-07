@@ -7,6 +7,8 @@ class Mq extends Model {
   get queueName() { return 'pubsubQueue'; }
   get queueEventName() { return 'queue:newTask'; }
 
+  static get type() { return 'mq'; }
+
   get schema() {
     return new this.Schema({
       _id: String,
@@ -266,8 +268,8 @@ class Mq extends Model {
       timer = setTimeout(resolve, this.constructor.defaults.visibilityMsec);
     });
 
-    const workerId = this.worker(rpcId, response);
-    await this.push(queue, {rpcId, args: payload}, {temp: true}); // TODO: long in time RPC
+    const workerId = this.sub(rpcId, response);
+    await this.push(queue, {rpcId, args: payload});
 
     const msg = await Promise.race([
       waitResponse,
@@ -283,7 +285,7 @@ class Mq extends Model {
   rpcworker(queue, onData) {
     const workerId = this.worker(queue, async (msg) => {
       const result = await onData.call(this, msg.args);
-      await this.push(msg.rpcId, result, {temp: true});
+      await this.pub(msg.rpcId, result);
     });
 
     return workerId;
@@ -501,24 +503,24 @@ class Mq extends Model {
       this.capDb = this.db;
     }
 
-    await this.db.ready;
-    await super.init();
-
     this.subs = {};
     this.subWait = {};
     this.workers = {};
     this.workerIdNext = 1;
     this.freeWorkers = {};
 
+    this.waitTerminate = new Promise((resolve) => {
+      this.terminate = resolve;
+    });
+
+    await this.db.ready;
+    await super.init();
+
     this.workerProlongVisibilityBound = this.workerProlongVisibility.bind(this);
     await this.sub(this.queueEventName, this.takeFreeWorker);
 
     this.waitPubsubCollReady = new Promise((resolve) => {
       this.pubsubCollReady = resolve;
-    });
-
-    this.waitTerminate = new Promise((resolve) => {
-      this.terminate = resolve;
     });
 
     this.pubsubLoop().catch((err) => {

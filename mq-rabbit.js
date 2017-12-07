@@ -8,6 +8,8 @@ class Mq extends AutoInit {
   // connOpts [optional] : AMQP connection options
   // prefix [optional] : prefix to queues
 
+  static get type() { return 'mq'; }
+
   async init() {
     await super.init();
 

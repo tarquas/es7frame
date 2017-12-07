@@ -9,6 +9,8 @@ class Db extends AutoInit {
   // connOpts [optional] : MongoDB connection options
   // prefix [optional] : prefix to collections
 
+  static get type() { return 'db'; }
+
   static newObjectId() {
     const objectId = this.common.Types.ObjectId();
     return objectId;

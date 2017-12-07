@@ -1,13 +1,17 @@
 const AutoInit = require('./auto-init');
 
-class Disp extends AutoInit {
+class Dispatcher extends AutoInit {
   // mq -- message queue (class Mq) instance
+
+  static get type() { return 'dispatcher'; }
 
   async addHandler(action, customHandler) {
     const [ents, socket, queue] = action.match(this.constructor.rxSocketQueue) || [];
     if (!ents) return;
     const handler = customHandler || this[action];
-    const handlerId = await this.mq[socket.toLowerCase()](queue, handler.bind(this));
+    const func = this.mq[socket.toLowerCase()];
+    if (!func) return;
+    const handlerId = await func.call(this.mq, queue, handler.bind(this));
     this.handlers[action] = handlerId;
   }
 
@@ -41,6 +45,6 @@ class Disp extends AutoInit {
   }
 }
 
-Disp.rxSocketQueue = /^(\w+)\s+(\S+)$/;
+Dispatcher.rxSocketQueue = /^(\w+)\s+(\S+)$/;
 
-module.exports = Disp;
+module.exports = Dispatcher;

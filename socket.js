@@ -4,6 +4,8 @@ const amqpAdapter = require('./socket-mq');
 const util = require('util');
 
 class Socket extends AutoInit {
+  static get type() { return 'socket'; }
+
   async error(err, {action}) {
     const now = new Date().toISOString();
 
