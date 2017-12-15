@@ -93,7 +93,7 @@ class Mq extends Model {
       {_id: id},
       {$set: {date: now}},
       {select: {queue: 1}}
-    );
+    ).lean().exec();
 
     await this.signalQueue(item.queue);
     return item;
@@ -195,7 +195,7 @@ class Mq extends Model {
             {queue, date: {$lt: new Date(now + this.constructor.defaults.accuracyMsec)}},
             {$set: {date: new Date(now + this.constructor.defaults.visibilityMsec)}},
             {sort: {date: 1}}
-          );
+          ).lean().exec();
 
           if (!item) {
             this.setFreeWorker(workerId);
@@ -271,7 +271,7 @@ class Mq extends Model {
     const workerId = this.sub(rpcId, response);
     await this.push(queue, {rpcId, args: payload});
 
-    const msg = await Promise.race([
+    const msg = await this.race([
       waitResponse,
       waitTimer,
       this.waitTerminate
@@ -412,7 +412,7 @@ class Mq extends Model {
 
         try {
           while (!this.finishing) {
-            this.latest = await Promise.race([
+            this.latest = await this.race([
               util.promisify(cursor.nextObject).call(cursor),
               this.waitTerminate
             ]);

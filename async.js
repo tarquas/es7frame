@@ -54,6 +54,75 @@ class Async extends EventEmitter {
     return err;
   }
 
+  static raceDone(promise, error) {
+    return (data) => {
+      const map = this.raceMap.get(promise);
+      if (!map) return;
+      this.raceMap.delete(promise);
+      promise[this.promiseIsError] = error;
+      promise[this.promiseValue] = data;
+
+      for (const trigger of map.keys()) {
+        for (const submap of trigger.map.keys()) {
+          submap.delete(trigger);
+        }
+
+        trigger.map.clear();
+        delete trigger.map;
+        const action = error ? trigger.reject : trigger.resolve;
+        delete trigger.resolve;
+        delete trigger.reject;
+        action(data);
+      }
+
+      map.clear();
+    };
+  }
+
+  race(...args) {
+    return this.constructor.race(...args);
+  }
+
+  static race(promises) {
+    for (const promise of promises) {
+      if (!(promise instanceof Promise)) return Promise.resolve(promise);
+
+      if (this.promiseIsError in promise) {
+        const data = promise[this.promiseValue];
+        if (promise[this.promiseIsError]) return Promise.reject(data);
+        return Promise.resolve(data);
+      }
+    }
+
+    return this.racePending(promises);
+  }
+
+  static racePending(promises) {
+    let trigger;
+
+    const result = new Promise((resolve, reject) => {
+      trigger = {resolve, reject};
+    });
+
+    const tMap = new Map();
+    trigger.map = tMap;
+
+    for (const promise of promises) {
+      let map = this.raceMap.get(promise);
+
+      if (!map) {
+        map = new Map();
+        this.raceMap.set(promise, map);
+        promise.then(this.raceDone(promise, false), this.raceDone(promise, true));
+      }
+
+      map.set(trigger, true);
+      tMap.set(map, true);
+    }
+
+    return result;
+  }
+
   static async finishAllInstances() {
     await Promise.all(Reflect.ownKeys(Async.instances).map(async (instanceId) => {
       const instance = Async.instances[instanceId];
@@ -70,7 +139,7 @@ class Async extends EventEmitter {
 
       const timeout = Async.delay(instance.finishTimeout);
       const finish = instance.finish().catch(err => this.throw(err, 'IN FINALIZER'));
-      await Promise.race([timeout, finish]); // eslint-disable-line
+      await this.race([timeout, finish]); // eslint-disable-line
     }));
   }
 
@@ -96,14 +165,21 @@ class Async extends EventEmitter {
       mainProc.catch(this.constructor.abortError);
       code = await abort;
     } else {
-      code = await Promise.race([abort, mainProc]);
+      code = await this.constructor.race([abort, mainProc]);
     }
 
     if (this.ignore) return false;
     return code;
   }
 
+  static async runMain(Launcher) {
+    const session = Launcher.defaultInstance || new Launcher();
+    return session.runMain();
+  }
+
   async runMain() {
+    if (!this.main) return false;
+    if (typeof this.main === 'object') return this.main.runMain();
     if (this.ignore) return false;
     if (!this.ready) return false;
     let code;
@@ -218,6 +294,10 @@ Async.nextInstanceId = 0;
 Async.holdOnTimeoutMsec = 60000;
 
 Async.finishTimeoutMsec = 2000;
+
+Async.raceMap = new Map();
+Async.promiseValue = Symbol('promiseValue');
+Async.promiseIsError = Symbol('promiseIsError');
 
 let hold = false;
 let code = 0;
