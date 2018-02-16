@@ -355,6 +355,8 @@ class Mq extends Model {
   }
 
   async pubsubLoop() { // eslint-disable-line
+    let prevErr = null;
+
     while (!this.finishing) {
       try {
         const {db} = this.capDb.conn;
@@ -469,8 +471,31 @@ class Mq extends Model {
         break;
       } catch (err) {
         if (this.capDb.conn._closeCalled) return;
+
+        if (prevErr !== err.stack) {
+          console.log('PubSub Loop:', err.stack || err);
+        }
+
+        prevErr = err.stack;
+        await this.delay(2000);
+        continue;
+
+        /*console.log(JSON.stringify(err.constructor.name, null, 2));
         if (err.code === 17399) continue;
-        throw err;
+        if (err.code === 11600) continue; // interrupted at shutdown
+
+        if (this.static.rxPubSubLoopCursorNotFound.test(err.message)) {
+          console.log('==== CursorNotFound Code:', err.code);
+          continue;
+        }
+
+        if (this.static.rxPubSubLoopConnectionClosed.test(err.message)) {
+          console.log('==== Connection closed Code:', err.code);
+          console.log(2);
+          continue;
+        }
+
+        throw err;*/
       }
     }
   }
@@ -524,7 +549,7 @@ class Mq extends Model {
     });
 
     this.pubsubLoop().catch((err) => {
-      console.log('PubSub Loop Fatal:', err.stack || err);
+      console.log(`PubSub Loop Fatal (code=${err.code || 'none'}):`, err.stack || err);
     });
   }
 
